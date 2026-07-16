@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. PostgreSQL (Central Database cho Spring Boot & ASP.NET Core)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: mxh_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: mxh_db
+      POSTGRES_USER: mxh_user
+      POSTGRES_PASSWORD: mxh_password_123!
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mxh_user -d mxh_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mxh_network
+
+  # ----------------------------------------------------------------------------
+  # 2. Redis (Hot Cache cho Session, Feed, Rate Limit, Pub/Sub)
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: mxh_redis
+    restart: always
+    command: redis-server --appendonly yes --requirepass "redis_password_123!"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_password_123!", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mxh_network
+
+  # ----------------------------------------------------------------------------
+  # 3. MinIO (Object Storage - Thay thế AWS S3 để lưu hình ảnh, video)
+  # ----------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: mxh_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio_admin
+      MINIO_ROOT_PASSWORD: minio_password_123!
+    ports:
+      - "9000:9000" # API Port (Dùng cho ASP.NET Core / Client gọi)
+      - "9001:9001" # Web Console Port (Quản trị viên vào trình duyệt để xem file)
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mxh_network
+
+  # ----------------------------------------------------------------------------
+  # 4. MinIO Setup Helper (Tự động tạo bucket mặc định 'mxh-media' khi chạy docker)
+  # ----------------------------------------------------------------------------
+  create-buckets:
+    image: minio/mc:latest
+    container_name: mxh_minio_setup
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      echo 'Chờ MinIO sẵn sàng...' &&
+      mc alias set myminio http://minio:9000 minio_admin minio_password_123! &&
+      echo 'Tạo bucket mxh-media nếu chưa tồn tại...' &&
+      mc mb myminio/mxh-media --ignore-existing &&
+      echo 'Cấu hình quyền đọc công khai (public download) cho bucket...' &&
+      mc anonymous set download myminio/mxh-media &&
+      echo 'Hoàn tất cấu hình MinIO!'
+      "
+    networks:
+      - mxh_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  mxh_network:
+    name: mxh_network
+    driver: bridge
