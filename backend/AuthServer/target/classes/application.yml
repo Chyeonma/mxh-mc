@@ -1,0 +1,40 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:mxh_db}
+    username: ${DB_USER:mxh_user}
+    password: ${DB_PASSWORD:mxh_password_123!}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate # Sử dụng validate để khớp với schema trong init.sql, không tự động ghi đè
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis_password_123!}
+
+# Cấu hình JWT cho ứng dụng
+app:
+  jwt:
+    # Chuỗi secret key đủ dài cho thuật toán HMAC SHA-256 (ít nhất 256 bits / 32 bytes)
+    secret: ${JWT_SECRET:9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b}
+    expiration-ms: 3600000 # 1 giờ (3,600,000 milliseconds)
+    refresh-expiration-ms: 604800000 # 7 ngày (604,800,000 milliseconds)
+
+logging:
+  level:
+    com.mxh.auth: DEBUG
+    org.springframework.security: INFO
